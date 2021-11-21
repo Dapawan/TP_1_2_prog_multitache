@@ -1,5 +1,8 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 enum matrice_type { BASE,
                     BASE_90_DEG,
@@ -19,6 +22,28 @@ char matrice_type_str[8][20] = {
     "TRANSPOSE_90_DEG",
     "TRANSPOSE_180_DEG",
     "TRANSPOSE_270_DEG"};
+
+/*
+//Contient la matrice ainsi que ses dimensions et son nom
+struct Matrice {
+    double **matrice_ptr;
+    int nb_col;
+    int nb_ligne;
+    char nom[20];
+};
+*/
+
+struct param_recherche_matrice {
+    double **matrice_src;
+    int nbr_col_matrice_src;
+    int nbr_ligne_matrice_src;
+    double **matrice_a_rechercher;
+    int nbr_col_motif;
+    int nbr_ligne_motif;
+    int *num_ligne_resultat;
+    int *num_col_resultat;
+};
+// void rechercheMatrice(double **matrice_src, int nbr_col_matrice_src, int nbr_ligne_matrice_src, double **matrice_a_rechercher, int nbr_col_motif, int nbr_ligne_motif, int *num_ligne_resultat, int *num_col_resultat) {
 
 /***************** double **dmatrix() *******************/
 //Alloue dynamiquement de la mémoire pour une matrice
@@ -95,29 +120,6 @@ void create_matrices(double ***tableau_matrice_2d) {
     //Création dynamique des matrices
     for (int i = 0; i < 9; i++)
         tableau_matrice_2d[i] = dmatrix(nbr_ligne, nbr_col);
-    /* Old way
-    double **matrice_base = dmatrix(nbr_ligne, nbr_col);
-    double **matrice_transpose = dmatrix(nbr_ligne, nbr_col);
-
-    double **matrice_90_deg = dmatrix(nbr_ligne, nbr_col);
-    double **matrice_180_deg = dmatrix(nbr_ligne, nbr_col);
-    double **matrice_270_deg = dmatrix(nbr_ligne, nbr_col);
-
-    double **matrice_transpose_90_deg = dmatrix(nbr_ligne, nbr_col);
-    double **matrice_transpose_180_deg = dmatrix(nbr_ligne, nbr_col);
-    double **matrice_transpose_270_deg = dmatrix(nbr_ligne, nbr_col);
-    
-
-    //Copie les adresses des matrices dans notre tableau de matrice
-    tableau_matrice_2d[BASE] = matrice_base;
-    tableau_matrice_2d[BASE_90_DEG] = matrice_90_deg;
-    tableau_matrice_2d[BASE_180_DEG] = matrice_180_deg;
-    tableau_matrice_2d[BASE_270_DEG] = matrice_270_deg;
-    tableau_matrice_2d[TRANSPOSE] = matrice_transpose;
-    tableau_matrice_2d[TRANSPOSE_90_DEG] = matrice_transpose_90_deg;
-    tableau_matrice_2d[TRANSPOSE_180_DEG] = matrice_transpose_180_deg;
-    tableau_matrice_2d[TRANSPOSE_270_DEG] = matrice_transpose_270_deg;
-    */
 
     //Matrice de base en format ligne
     double matrice_base_[9] = {2, 2, 4, 1, 1, 3, 2, 1, 1};
@@ -153,6 +155,98 @@ int compareMotifs(double *motif_1, double *motif_2, int nbr_col, int nbr_ligne) 
     return 1;
 }
 
+/**
+ * @brief 
+ * Cherche un motif dans la matrice source --> La matrice source est plus grande que le motif
+ * @param matrice_src 
+ * matrice dans laquelle on souhaite faire la recherche
+ * @param nbr_col_matrice_src 
+ * nombre colonne de la matrice source
+ * @param nbr_ligne_matrice_src 
+ * nombre ligne de la matrice source
+ * @param matrice_a_rechercher 
+ * matrice a rechercher dans la matrice source
+ * @param nbr_col_motif 
+ * nombre colonne de la matrice du motif
+ * @param nbr_ligne_motif 
+ * nombre ligne de la matrice du motif
+ * @param num_ligne_resultat 
+ * -1 : pas trouvé, >= 0 dans les autres cas
+ * @param num_col_resultat 
+ * -1 : pas trouvé, >= 0 dans les autres cas
+ */
+void rechercheMatrice(double **matrice_src, int nbr_col_matrice_src, int nbr_ligne_matrice_src, double **matrice_a_rechercher, int nbr_col_motif, int nbr_ligne_motif, int *num_ligne_resultat, int *num_col_resultat) {
+    double **sous_matrice = dmatrix(3, 3);                                                                             //Contient la sous matrice
+    double *motif_sous_matrice;                                                                                        //Contient la sous matrice en 1D
+    double *motif_matrice_a_rechercher = matrice_vers_motif_1D(matrice_a_rechercher, nbr_ligne_motif, nbr_col_motif);  //Contient la matrice a rechercher en 1D
+
+    *num_col_resultat = -1;
+    *num_ligne_resultat = -1;
+
+    //On parcourt la matrice source en récupérant une sous matrice de la taille du motif
+    for (int i = 0; i <= (nbr_col_matrice_src - nbr_col_motif); i += 1) {
+        for (int j = 0; j <= (nbr_ligne_matrice_src - nbr_ligne_motif); j += 1) {
+            // matrice_vers_motif_1D(matrice_13_13[i][j], nbr_ligne, nbr_col);
+
+            //On extrait une sous matrice de la matrice source ayant la taille de la matrice du motif
+            extractionSousMatrice(matrice_src, sous_matrice, j, i, nbr_ligne_motif, nbr_col_motif);
+            // printf("Matrice 3*3 à col = %d et ligne = %d\n", i, j);
+            // print_matrice(sous_matrice, 3, 3);
+
+            motif_sous_matrice = matrice_vers_motif_1D(sous_matrice, nbr_ligne_motif, nbr_col_motif);
+            //Affiche la sous matrice en 1D
+            // printf("Motif : ");
+            // for (int i = 0; i < 9; i++) {
+            // printf("%d", (int)motif_sous_matrice[i]);
+            // }
+            // printf("\n");
+
+            //Compare la sous matrice 1D avec le motif en 1D
+            if (compareMotifs(motif_sous_matrice, motif_matrice_a_rechercher, nbr_col_motif, nbr_ligne_motif) == 1) {
+                //Motifs identiques
+                // printf("Le motif %s est equivalent\n", matrice_type_str[x]);
+                printf("Motif a comparer : ");
+                print_matrice(matrice_a_rechercher, nbr_ligne_motif, nbr_col_motif);
+                printf("Motif : ");
+                print_matrice(sous_matrice, nbr_ligne_motif, nbr_col_motif);
+                *num_col_resultat = i;
+                *num_ligne_resultat = j;
+                return;
+            }
+        }
+    }
+}
+
+void *task_recherche_matrice(void *p_data) {
+    struct param_recherche_matrice *val;
+
+    val = (struct param_recherche_matrice *)p_data;
+    val->num_col_resultat = (int *)malloc(sizeof(int));
+    val->num_ligne_resultat = (int *)malloc(sizeof(int));
+
+    rechercheMatrice(val->matrice_src, val->nbr_col_matrice_src, val->nbr_ligne_matrice_src, val->matrice_a_rechercher, val->nbr_col_motif, val->nbr_ligne_motif, val->num_ligne_resultat, val->num_col_resultat);
+
+    pthread_exit(val);
+}
+
+/******************NEW WAY*******************************/
+/*
+struct Matrice *creationMatrice(int nb_col, int nb_ligne, const char nom[20]) {
+    struct Matrice *matrice_struct = (struct Matrice *)malloc(sizeof(struct Matrice));
+
+    matrice_struct->matrice_ptr = dmatrix(nb_col, nb_ligne);
+    matrice_struct->nb_col = nb_col;
+    matrice_struct->nb_ligne = nb_ligne;
+    strcpy(matrice_struct->nom, nom);
+
+    return matrice_struct;
+}
+//Affiche la matrice
+void print_matrice_(struct Matrice *matrice) {
+    printf("Matrice avec le nom : %s", matrice->nom);
+    print_matrice(matrice->matrice_ptr, matrice->nb_ligne, matrice->nb_col);
+}
+*/
 int main(void) {
     int nbr_col = 3;
     int nbr_ligne = 3;
@@ -192,9 +286,27 @@ int main(void) {
 
     //Récupère les 8 matrices en format 1D (avec la manière de récupérer le motif)
     double *tableau_motif_a_comparer[9];
+
+    clock_t t;
+    t = clock();
+    printf("Timer starts -> without thread\n");
+
+    //Cherche le motif dans la grande matrice
+    int num_col_resultat, num_ligne_resultat;
     for (int i = 0; i < 8; i++) {
-        tableau_motif_a_comparer[i] = matrice_vers_motif_1D(tableau_matrice_2d[i], 3, 3);
+        // tableau_motif_a_comparer[i] = matrice_vers_motif_1D(tableau_matrice_2d[i], 3, 3);
+        rechercheMatrice(matrice_14_14, 14, 14, tableau_matrice_2d[i], 3, 3, &num_ligne_resultat, &num_col_resultat);
+        if (num_col_resultat != -1 && num_ligne_resultat != -1) {
+            //TROUVE
+            printf("\nTROUVE avec le type de motif : %s\n", matrice_type_str[i]);
+            // break;
+        }
     }
+
+    printf("Timer ends \n");
+    t = clock() - t;
+    double time_taken = ((double)t) / CLOCKS_PER_SEC;  // calculate the elapsed time
+    printf("The program took %f seconds to execute\n", time_taken);
 
     // for (int i = 0; i < 8; i++) {
     //     printf("Motif : ");
@@ -208,6 +320,7 @@ int main(void) {
     // }
     // printf("\n");
 
+    /*
     //On extrait une matrice 3*3 de la matrice 14*14
     for (int i = 0; i <= 14 - 3; i += 1) {
         for (int j = 0; j <= 14 - 3; j += 1) {
@@ -236,6 +349,43 @@ int main(void) {
             }
         }
     }
+    */
+
+    //Question 2 : sur 8 threads -> Chaque thread cherche 1 motif dans la grande matrice
+    pthread_t thread_tableau[8];
+    /*
+    struct Matrice *matrice = creationMatrice(3, 3, "Test");
+    print_matrice_(matrice);*/
+
+    // Calculate the time taken by take_enter()
+    t = clock();
+    printf("Timer starts -> with 8 threads\n");
+
+    for (int i = 0; i < 8; i++) {
+        struct param_recherche_matrice *val = (struct param_recherche_matrice *)malloc(sizeof(struct param_recherche_matrice));
+        val->matrice_src = matrice_14_14;
+        val->matrice_a_rechercher = tableau_matrice_2d[i];
+        val->nbr_col_matrice_src = 14;
+        val->nbr_ligne_matrice_src = 14;
+        val->nbr_col_motif = 3;
+        val->nbr_ligne_motif = 3;
+        pthread_create((pthread_t *)&thread_tableau[i], NULL, task_recherche_matrice, val);
+    }
+
+    for (int i = 0; i < 8; i++) {
+        struct param_recherche_matrice *val;
+        pthread_join((pthread_t)thread_tableau[i], (struct param_recherche_matrice **)&val);
+        if (*val->num_col_resultat != -1 && *val->num_ligne_resultat != -1) {
+            //TROUVE
+            printf("\nTROUVE avec le type de motif : %s\n", matrice_type_str[i]);
+            // break;
+        }
+    }
+
+    printf("Timer ends \n");
+    t = clock() - t;
+    time_taken = ((double)t) / CLOCKS_PER_SEC;  // calculate the elapsed time
+    printf("The program took %f seconds to execute\n", time_taken);
 
     /*
     Test de la conversion de matrice à motif 1D
